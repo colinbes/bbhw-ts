@@ -1,21 +1,22 @@
 import {
-	existsSync,
-	readFileSync,
-	statSync,
-	truncateSync,
-	writeFileSync,
+  existsSync,
+  readFileSync,
+  statSync,
+  truncateSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { msleep } from "../utils/utils.js";
+import { logger } from "../utils/appLogger.js";
 
 export type PwmChip = {
-	chip: number;
-	pwm: number;
+  chip: number;
+  pwm: number;
 };
 
 export type PwmFreqValue = {
-	frequency: number;
-	value: number;
+  frequency: number;
+  value: number;
 };
 
 const pinToPwmChipMap: Map<string, PwmChip> = new Map();
@@ -38,95 +39,121 @@ pinToPwmChipMap.set("P9_42", { chip: 0, pwm: 0 }); //ECAPPWM0
 pinToPwmChipMap.set("P9_28", { chip: 2, pwm: 0 }); //ECAPPWM2
 
 export class PWM {
-	pwmChip: PwmChip;
-	pwmPath: string;
+  pwmChip: PwmChip;
+  pwmPath: string;
+  pwm: PwmFreqValue;
 
-	constructor(pin: string) {
-		const pwmChip = pinToPwmChipMap.get(pin);
-		if (pwmChip === undefined) {
-			throw new Error(
-				`Bad PWM pin, needs to be something like: ${pinToPwmChipMap.keys().next().value}`,
-			);
-		}
-		this.pwmChip = pwmChip;
-		const pwmChipPath = this._findPwmChipDir();
-		if (!pwmChipPath) {
-			throw new Error(
-				`Unable to find pwm chip directory for chip id ${this.pwmChip.chip}`,
-			);
-		}
-		const pwmPath = join(pwmChipPath, `pwm${this.pwmChip.pwm}`);
-		if (!existsSync(pwmPath)) {
-			this._export(pwmChipPath);
-		}
-		this.pwmPath = pwmPath;
-		this.setPwmFrequencyAndValue({ frequency: 2000, value: 0 });
-		this.enable();
-		this.setPolarity("normal");
-	}
+  constructor(pin: string) {
+    const pwmChip = pinToPwmChipMap.get(pin);
+    if (pwmChip === undefined) {
+      throw new Error(
+        `Bad PWM pin, needs to be something like: ${pinToPwmChipMap.keys().next().value}`,
+      );
+    }
+    this.pwmChip = pwmChip;
+    const pwmChipPath = this._findPwmChipDir();
+    if (!pwmChipPath) {
+      throw new Error(
+        `Unable to find pwm chip directory for chip id ${this.pwmChip.chip}`,
+      );
+    }
+    const pwmPath = join(pwmChipPath, `pwm${this.pwmChip.pwm}`);
+    if (!existsSync(pwmPath)) {
+      this._export(pwmChipPath);
+    }
+    //Keep prior values for future processing comparisons
+    this.pwm = { frequency: 0, value: 0 };
 
-	_findPwmChipDir(): string | undefined {
-		const chipdir = `/sys/class/pwm/pwmchip${this.pwmChip.chip}/`;
-		const stats = statSync(chipdir);
-		if (stats?.isDirectory()) {
-			return chipdir;
-		}
-		return undefined;
-	}
+    this.pwmPath = pwmPath;
+    this.setPwmFrequencyAndValue({ frequency: 2000, value: 0 });
+    this.enable();
+    this.setPolarity("normal");
+  }
 
-	_export(pwmChipPath: string) {
-		const exportPath = join(pwmChipPath, "export");
-		const pwmPath = join(pwmChipPath, `pwm${this.pwmChip.pwm}`);
-		writeFileSync(exportPath, this.pwmChip.pwm.toString());
-		let count = 0;
-		const limit = 20;
-		while (!existsSync(pwmPath)) {
-			msleep(50);
-			count++;
-			if (count >= limit) {
-				throw new Error(`Failed to export pwm: ${this.pwmChip}`);
-			}
-		}
-	}
+  _findPwmChipDir(): string | undefined {
+    const chipdir = `/sys/class/pwm/pwmchip${this.pwmChip.chip}/`;
+    const stats = statSync(chipdir);
+    if (stats?.isDirectory()) {
+      return chipdir;
+    }
+    return undefined;
+  }
 
-	isEnabled() {
-		return readFileSync(join(this.pwmPath, "enable")).toString().trim() === "1";
-	}
+  _export(pwmChipPath: string) {
+    const exportPath = join(pwmChipPath, "export");
+    const pwmPath = join(pwmChipPath, `pwm${this.pwmChip.pwm}`);
+    writeFileSync(exportPath, this.pwmChip.pwm.toString());
+    let count = 0;
+    const limit = 20;
+    while (!existsSync(pwmPath)) {
+      msleep(50);
+      count++;
+      if (count >= limit) {
+        throw new Error(`Failed to export pwm: ${this.pwmChip}`);
+      }
+    }
+  }
 
-	enable() {
-		writeFileSync(join(this.pwmPath, "enable"), "1");
-	}
+  isEnabled() {
+    return readFileSync(join(this.pwmPath, "enable")).toString().trim() === "1";
+  }
 
-	disable() {
-		truncateSync(join(this.pwmPath, "duty_cycle"), 0);
-		writeFileSync(join(this.pwmPath, "duty_cycle"), "0");
-		writeFileSync(join(this.pwmPath, "enable"), "0");
-	}
+  enable() {
+    writeFileSync(join(this.pwmPath, "enable"), "1");
+  }
 
-	setPolarity(polarity: "normal" | "inversed") {
-		truncateSync(join(this.pwmPath, "polarity"), 0);
-		writeFileSync(join(this.pwmPath, "polarity"), polarity);
-	}
+  disable() {
+    truncateSync(join(this.pwmPath, "duty_cycle"), 0);
+    writeFileSync(join(this.pwmPath, "duty_cycle"), "0");
+    writeFileSync(join(this.pwmPath, "enable"), "0");
+  }
 
-	setPwmFrequencyAndValue({ frequency, value }: PwmFreqValue) {
-		const period = Math.round(1.0e9 / frequency); // period in ns
-		const duty = Math.round(period * value);
-		writeFileSync(join(this.pwmPath, "duty_cycle"), "0");
-		writeFileSync(join(this.pwmPath, "period"), period.toString());
-		writeFileSync(join(this.pwmPath, "duty_cycle"), duty.toString());
-	}
+  setPolarity(polarity: "normal" | "inversed") {
+    truncateSync(join(this.pwmPath, "polarity"), 0);
+    writeFileSync(join(this.pwmPath, "polarity"), polarity);
+  }
 
-	getPwmFrequencyAndValue(): PwmFreqValue {
-		const periodStr = readFileSync(join(this.pwmPath, "period")).toString(
-			"utf-8",
-		);
-		const dutyStr = readFileSync(join(this.pwmPath, "duty_cycle")).toString(
-			"utf-8",
-		);
-		const period = Number.parseInt(periodStr, 10);
-		const duty = Number.parseInt(dutyStr, 10);
-		const frequency = 1.0e9 / period;
-		const value = duty / period;
-		return { frequency, value };
-	}
+  setPwmFrequencyAndValue({ frequency, value }: PwmFreqValue) {
+    const period = Math.round(1.0e9 / frequency); // period in ns
+    const duty = Math.round(period * value);
+    const priorPwm = this.pwm;
+    //if frequency is set to zero then we have to write value > 0 to initialize.
+    // We could try read first but it would be more expensive
+    if (priorPwm.frequency === 0) {
+      logger.debug(
+        `found freq === 0, echo ${period.toString()} to ${join(this.pwmPath, "period")}`,
+      );
+      writeFileSync(join(this.pwmPath, "period"), period.toString());
+      logger.debug(
+        `echo ${duty.toString()} to ${join(this.pwmPath, "duty_cycle")}`,
+      );
+      writeFileSync(join(this.pwmPath, "duty_cycle"), duty.toString());
+      this.pwm.frequency = frequency;
+    } else {
+      writeFileSync(join(this.pwmPath, "duty_cycle"), "0");
+      logger.debug(
+        `echo ${period.toString()} to ${join(this.pwmPath, "period")}`,
+      );
+      writeFileSync(join(this.pwmPath, "period"), period.toString());
+      logger.debug(
+        `echo ${duty.toString()} to ${join(this.pwmPath, "duty_cycle")}`,
+      );
+      writeFileSync(join(this.pwmPath, "duty_cycle"), duty.toString());
+      this.pwm = { frequency: frequency, value: value };
+    }
+  }
+
+  getPwmFrequencyAndValue(): PwmFreqValue {
+    const periodStr = readFileSync(join(this.pwmPath, "period")).toString(
+      "utf-8",
+    );
+    const dutyStr = readFileSync(join(this.pwmPath, "duty_cycle")).toString(
+      "utf-8",
+    );
+    const period = Number.parseInt(periodStr, 10);
+    const duty = Number.parseInt(dutyStr, 10);
+    const frequency = 1.0e9 / period;
+    const value = duty / period;
+    return { frequency, value };
+  }
 }

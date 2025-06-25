@@ -1,8 +1,9 @@
 {
-  "include":["src/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "compilerOptions": {
     "target": "es2015",
     "module": "es2015",
+    "moduleResolution": "node",
     "declaration": true,
     "outDir": "./dist",
     "noEmit": false,
