@@ -81,3 +81,16 @@ while(true) {
     msleep(1000)
 }
 ```
+
+## Logger
+Logging provided by winston.
+
+Uses env variable
+- **LOG_FOLDER** for relative location of log file, defaults to  "log/logger.log"
+- **LOG_LEVEL** to define log level, defaults to "warn"
+
+# versions
+
+## 1.0.18
+
+Updates to pwm.ts dealing with corner cases with pwm freq value.
