@@ -7,7 +7,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { msleep } from "../utils/utils.js";
-import { logger } from "../utils/appLogger.js";
 
 export type PwmChip = {
   chip: number;
@@ -120,24 +119,12 @@ export class PWM {
     //if frequency is set to zero then we have to write value > 0 to initialize.
     // We could try read first but it would be more expensive
     if (priorPwm.frequency === 0) {
-      logger.debug(
-        `found freq === 0, echo ${period.toString()} to ${join(this.pwmPath, "period")}`,
-      );
       writeFileSync(join(this.pwmPath, "period"), period.toString());
-      logger.debug(
-        `echo ${duty.toString()} to ${join(this.pwmPath, "duty_cycle")}`,
-      );
       writeFileSync(join(this.pwmPath, "duty_cycle"), duty.toString());
       this.pwm.frequency = frequency;
     } else {
       writeFileSync(join(this.pwmPath, "duty_cycle"), "0");
-      logger.debug(
-        `echo ${period.toString()} to ${join(this.pwmPath, "period")}`,
-      );
       writeFileSync(join(this.pwmPath, "period"), period.toString());
-      logger.debug(
-        `echo ${duty.toString()} to ${join(this.pwmPath, "duty_cycle")}`,
-      );
       writeFileSync(join(this.pwmPath, "duty_cycle"), duty.toString());
       this.pwm = { frequency: frequency, value: value };
     }

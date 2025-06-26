@@ -25,7 +25,6 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "i2c-bus": "^5.2.3",
-    "winston": "^3.17.0"
+    "i2c-bus": "^5.2.3"
   }
 }

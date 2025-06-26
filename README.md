@@ -82,13 +82,6 @@ while(true) {
 }
 ```
 
-## Logger
-Logging provided by winston.
-
-Uses env variable
-- **LOG_FOLDER** for relative location of log file, defaults to  "log/logger.log"
-- **LOG_LEVEL** to define log level, defaults to "warn"
-
 # versions
 
 ## 1.0.18
